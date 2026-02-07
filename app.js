@@ -2,17 +2,20 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   addDoc,
   collection,
+  deleteDoc,
+  doc,
   getFirestore,
   onSnapshot,
+  orderBy,
   query,
   serverTimestamp,
-  orderBy,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import {
+  deleteObject,
+  getDownloadURL,
   getStorage,
   ref,
   uploadBytes,
-  getDownloadURL,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
 import { FIREBASE_CONFIG, FIRESTORE_COLLECTION } from './firebase-config.js';
 
@@ -78,6 +81,7 @@ txnForm.addEventListener('submit', async (e) => {
     description: fd.get('description') || '',
     attachmentName: '',
     attachmentUrl: '',
+    attachmentPath: '',
     receiptNumber: null,
     createdAt: new Date().toISOString(),
   };
@@ -90,8 +94,11 @@ txnForm.addEventListener('submit', async (e) => {
   try {
     if (isCloudEnabled) {
       if (attachment && attachment.size > 0) {
+        const safeName = attachment.name.replace(/\s+/g, '_');
+        const storagePath = `masjid-bukti/${Date.now()}-${safeName}`;
         txn.attachmentName = attachment.name;
-        const fileRef = ref(cloudStorage, `masjid-bukti/${Date.now()}-${attachment.name}`);
+        txn.attachmentPath = storagePath;
+        const fileRef = ref(cloudStorage, storagePath);
         await uploadBytes(fileRef, attachment);
         txn.attachmentUrl = await getDownloadURL(fileRef);
       }
@@ -107,7 +114,7 @@ txnForm.addEventListener('submit', async (e) => {
       }
       txn.id = crypto.randomUUID();
       allTransactions.push(txn);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(allTransactions));
+      saveLocalTransactions(allTransactions);
       renderAudit();
     }
 
@@ -127,6 +134,10 @@ document.getElementById('closeReceipt').addEventListener('click', () => receiptD
 
 function getLocalTransactions() {
   return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+}
+
+function saveLocalTransactions(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
 function startCloudSync() {
@@ -167,7 +178,7 @@ function renderAudit() {
     const tr = document.createElement('tr');
     const detail = `${t.description || '-'} ${t.name ? `(${t.name})` : ''}`;
     const attachmentHtml = t.attachmentUrl
-      ? `<a href="${t.attachmentUrl}" target="_blank">${t.attachmentName || 'Lampiran'}</a>`
+      ? `<a href="${t.attachmentUrl}" target="_blank" rel="noopener noreferrer">${t.attachmentName || 'Lampiran'}</a>`
       : '-';
 
     tr.innerHTML = `
@@ -177,6 +188,7 @@ function renderAudit() {
       <td>RM ${Number(t.amount).toFixed(2)}</td>
       <td>${detail}</td>
       <td>${attachmentHtml}${t.receiptNumber ? `<br/><a href="#" data-receipt="${t.id}">${t.receiptNumber}</a>` : ''}</td>
+      <td><button type="button" class="btn-delete" data-delete="${t.id}">Padam</button></td>
     `;
     auditBody.appendChild(tr);
   });
@@ -189,6 +201,41 @@ function renderAudit() {
       if (txn) openReceipt(txn);
     });
   });
+
+  auditBody.querySelectorAll('[data-delete]').forEach((el) => {
+    el.addEventListener('click', async () => {
+      const id = el.getAttribute('data-delete');
+      await deleteTransaction(id);
+    });
+  });
+}
+
+async function deleteTransaction(id) {
+  const txn = allTransactions.find((item) => item.id === id);
+  if (!txn) return;
+
+  const ok = window.confirm(`Padam transaksi ${txn.category} pada ${txn.date}?`);
+  if (!ok) return;
+
+  try {
+    if (isCloudEnabled) {
+      await deleteDoc(doc(cloudDb, FIRESTORE_COLLECTION, id));
+      if (txn.attachmentPath) {
+        try {
+          await deleteObject(ref(cloudStorage, txn.attachmentPath));
+        } catch (storageError) {
+          console.warn('Lampiran mungkin sudah tiada dalam Storage:', storageError);
+        }
+      }
+    } else {
+      allTransactions = allTransactions.filter((item) => item.id !== id);
+      saveLocalTransactions(allTransactions);
+      renderAudit();
+    }
+  } catch (error) {
+    console.error(error);
+    alert('Gagal padam transaksi. Sila cuba lagi.');
+  }
 }
 
 function openReceipt(txn) {
