@@ -20,8 +20,9 @@ import {
 import { FIREBASE_CONFIG, FIRESTORE_COLLECTION } from './firebase-config.js';
 
 const STORAGE_KEY = 'masjid_audit_transactions_v1';
-const ADMIN_USER = 'admin';
-const ADMIN_PASS = 'admin123';
+const ADMIN_USER = 'suraumatsalleh';
+const ADMIN_PASS = 'surauMatSalleh900';
+const CLOUD_TIMEOUT_MS = 12000;
 
 const loginSection = document.getElementById('loginSection');
 const appSection = document.getElementById('appSection');
@@ -31,24 +32,23 @@ const receiptDialog = document.getElementById('receiptDialog');
 const receiptContent = document.getElementById('receiptContent');
 const syncStatus = document.getElementById('syncStatus');
 const txnForm = document.getElementById('txnForm');
+const saveBtn = txnForm.querySelector('button[type="submit"]');
 
 txnForm.date.value = new Date().toISOString().slice(0, 10);
 
-const isCloudEnabled = Boolean(FIREBASE_CONFIG?.projectId);
+const hasCloudConfig = Boolean(FIREBASE_CONFIG?.projectId);
+let cloudMode = hasCloudConfig;
 let cloudDb = null;
 let cloudStorage = null;
-let allTransactions = [];
+let allTransactions = getLocalTransactions();
 let stopCloudSync = null;
 
-if (isCloudEnabled) {
+if (hasCloudConfig) {
   const app = initializeApp(FIREBASE_CONFIG);
   cloudDb = getFirestore(app);
   cloudStorage = getStorage(app);
-  syncStatus.textContent = 'Mod: cloud sync aktif';
-} else {
-  syncStatus.textContent = 'Mod: local sahaja';
-  allTransactions = getLocalTransactions();
 }
+updateSyncStatus();
 
 document.getElementById('loginForm').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -86,36 +86,25 @@ txnForm.addEventListener('submit', async (e) => {
     createdAt: new Date().toISOString(),
   };
 
+  if (!txn.date || !txn.category || Number.isNaN(txn.amount) || txn.amount <= 0) {
+    alert('Sila isi tarikh, kategori dan amaun yang betul.');
+    return;
+  }
+
   if (txn.type === 'masuk' && txn.method === 'tunai') {
     const tempId = crypto.randomUUID().slice(0, 6).toUpperCase();
     txn.receiptNumber = `RCPT-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${tempId}`;
   }
 
+  setSavingState(true);
   try {
-    if (isCloudEnabled) {
-      if (attachment && attachment.size > 0) {
-        const safeName = attachment.name.replace(/\s+/g, '_');
-        const storagePath = `masjid-bukti/${Date.now()}-${safeName}`;
-        txn.attachmentName = attachment.name;
-        txn.attachmentPath = storagePath;
-        const fileRef = ref(cloudStorage, storagePath);
-        await uploadBytes(fileRef, attachment);
-        txn.attachmentUrl = await getDownloadURL(fileRef);
-      }
-
-      await addDoc(collection(cloudDb, FIRESTORE_COLLECTION), {
-        ...txn,
-        createdAtServer: serverTimestamp(),
-      });
-    } else {
-      if (attachment && attachment.size > 0) {
-        txn.attachmentName = attachment.name;
-        txn.attachmentUrl = await toBase64(attachment);
-      }
-      txn.id = crypto.randomUUID();
-      allTransactions.push(txn);
+    if (cloudMode) {
+      const savedCloudTxn = await withTimeout(saveToCloud(txn, attachment), CLOUD_TIMEOUT_MS);
+      upsertTransaction(savedCloudTxn);
       saveLocalTransactions(allTransactions);
       renderAudit();
+    } else {
+      await saveToLocal(txn, attachment);
     }
 
     if (txn.receiptNumber) openReceipt(txn);
@@ -123,7 +112,21 @@ txnForm.addEventListener('submit', async (e) => {
     txnForm.date.value = new Date().toISOString().slice(0, 10);
   } catch (err) {
     console.error(err);
-    alert('Gagal simpan transaksi. Sila semak config cloud atau cuba lagi.');
+    if (cloudMode) {
+      try {
+        await saveToLocal(txn, attachment);
+        cloudMode = false;
+        updateSyncStatus('Cloud gagal. Auto tukar ke mod local supaya data tetap tercatat.');
+        alert('Cloud tidak respon. Data sudah disimpan local dahulu.');
+      } catch (localErr) {
+        console.error(localErr);
+        alert('Gagal simpan ke cloud dan local. Sila kecilkan saiz lampiran atau cuba lagi.');
+      }
+    } else {
+      alert('Gagal simpan transaksi. Sila kecilkan lampiran atau cuba lagi.');
+    }
+  } finally {
+    setSavingState(false);
   }
 });
 
@@ -131,6 +134,23 @@ document.getElementById('generateBtn').addEventListener('click', renderAudit);
 document.getElementById('printBtn').addEventListener('click', () => window.print());
 document.getElementById('printReceipt').addEventListener('click', () => window.print());
 document.getElementById('closeReceipt').addEventListener('click', () => receiptDialog.close());
+
+function withTimeout(promise, timeoutMs) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
+  ]);
+}
+
+function setSavingState(isSaving) {
+  saveBtn.disabled = isSaving;
+  saveBtn.textContent = isSaving ? 'Menyimpan...' : 'Simpan';
+}
+
+function updateSyncStatus(extra = '') {
+  const base = cloudMode ? 'Mod: cloud sync aktif' : 'Mod: local sahaja';
+  syncStatus.textContent = extra ? `${base} | ${extra}` : base;
+}
 
 function getLocalTransactions() {
   return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
@@ -140,13 +160,65 @@ function saveLocalTransactions(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
-function startCloudSync() {
-  if (stopCloudSync) return;
-  const q = query(collection(cloudDb, FIRESTORE_COLLECTION), orderBy('date', 'asc'));
-  stopCloudSync = onSnapshot(q, (snapshot) => {
-    allTransactions = snapshot.docs.map((docItem) => ({ id: docItem.id, ...docItem.data() }));
-    renderAudit();
+async function saveToLocal(txn, attachment) {
+  const localTxn = { ...txn, id: crypto.randomUUID() };
+  if (attachment && attachment.size > 0 && !localTxn.attachmentUrl) {
+    localTxn.attachmentName = attachment.name;
+    localTxn.attachmentUrl = await toBase64(attachment);
+  }
+  upsertTransaction(localTxn);
+  saveLocalTransactions(allTransactions);
+  renderAudit();
+  return localTxn;
+}
+
+async function saveToCloud(txn, attachment) {
+  const cloudTxn = { ...txn };
+  if (attachment && attachment.size > 0) {
+    const safeName = attachment.name.replace(/\s+/g, '_');
+    const storagePath = `masjid-bukti/${Date.now()}-${safeName}`;
+    cloudTxn.attachmentName = attachment.name;
+    cloudTxn.attachmentPath = storagePath;
+    const fileRef = ref(cloudStorage, storagePath);
+    await uploadBytes(fileRef, attachment);
+    cloudTxn.attachmentUrl = await getDownloadURL(fileRef);
+  }
+
+  const docRef = await addDoc(collection(cloudDb, FIRESTORE_COLLECTION), {
+    ...cloudTxn,
+    createdAtServer: serverTimestamp(),
   });
+
+  return { ...cloudTxn, id: docRef.id };
+}
+
+function upsertTransaction(txn) {
+  const idx = allTransactions.findIndex((item) => item.id === txn.id);
+  if (idx >= 0) {
+    allTransactions[idx] = txn;
+  } else {
+    allTransactions.push(txn);
+  }
+}
+
+function startCloudSync() {
+  if (!cloudMode || stopCloudSync) return;
+  const q = query(collection(cloudDb, FIRESTORE_COLLECTION), orderBy('date', 'asc'));
+  stopCloudSync = onSnapshot(
+    q,
+    (snapshot) => {
+      allTransactions = snapshot.docs.map((docItem) => ({ id: docItem.id, ...docItem.data() }));
+      saveLocalTransactions(allTransactions);
+      renderAudit();
+    },
+    (error) => {
+      console.error(error);
+      cloudMode = false;
+      updateSyncStatus('Cloud sync terhenti. Guna local dahulu.');
+      allTransactions = getLocalTransactions();
+      renderAudit();
+    },
+  );
 }
 
 function renderApp() {
@@ -156,7 +228,7 @@ function renderApp() {
   topActions.classList.toggle('hidden', !loggedIn);
 
   if (loggedIn) {
-    if (isCloudEnabled) startCloudSync();
+    startCloudSync();
     renderAudit();
   }
 }
@@ -218,11 +290,11 @@ async function deleteTransaction(id) {
   if (!ok) return;
 
   try {
-    if (isCloudEnabled) {
-      await deleteDoc(doc(cloudDb, FIRESTORE_COLLECTION, id));
+    if (cloudMode) {
+      await withTimeout(deleteDoc(doc(cloudDb, FIRESTORE_COLLECTION, id)), CLOUD_TIMEOUT_MS);
       if (txn.attachmentPath) {
         try {
-          await deleteObject(ref(cloudStorage, txn.attachmentPath));
+          await withTimeout(deleteObject(ref(cloudStorage, txn.attachmentPath)), CLOUD_TIMEOUT_MS);
         } catch (storageError) {
           console.warn('Lampiran mungkin sudah tiada dalam Storage:', storageError);
         }
