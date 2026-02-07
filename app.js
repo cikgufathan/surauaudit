@@ -99,7 +99,10 @@ txnForm.addEventListener('submit', async (e) => {
   setSavingState(true);
   try {
     if (cloudMode) {
-      await withTimeout(saveToCloud(txn, attachment), CLOUD_TIMEOUT_MS);
+      const savedCloudTxn = await withTimeout(saveToCloud(txn, attachment), CLOUD_TIMEOUT_MS);
+      upsertTransaction(savedCloudTxn);
+      saveLocalTransactions(allTransactions);
+      renderAudit();
     } else {
       await saveToLocal(txn, attachment);
     }
@@ -110,12 +113,17 @@ txnForm.addEventListener('submit', async (e) => {
   } catch (err) {
     console.error(err);
     if (cloudMode) {
-      await saveToLocal(txn, attachment);
-      cloudMode = false;
-      updateSyncStatus('Cloud gagal. Auto tukar ke mod local supaya data tetap tercatat.');
-      alert('Cloud tidak respon. Data sudah disimpan local dahulu.');
+      try {
+        await saveToLocal(txn, attachment);
+        cloudMode = false;
+        updateSyncStatus('Cloud gagal. Auto tukar ke mod local supaya data tetap tercatat.');
+        alert('Cloud tidak respon. Data sudah disimpan local dahulu.');
+      } catch (localErr) {
+        console.error(localErr);
+        alert('Gagal simpan ke cloud dan local. Sila kecilkan saiz lampiran atau cuba lagi.');
+      }
     } else {
-      alert('Gagal simpan transaksi. Sila cuba lagi.');
+      alert('Gagal simpan transaksi. Sila kecilkan lampiran atau cuba lagi.');
     }
   } finally {
     setSavingState(false);
@@ -158,9 +166,10 @@ async function saveToLocal(txn, attachment) {
     localTxn.attachmentName = attachment.name;
     localTxn.attachmentUrl = await toBase64(attachment);
   }
-  allTransactions.push(localTxn);
+  upsertTransaction(localTxn);
   saveLocalTransactions(allTransactions);
   renderAudit();
+  return localTxn;
 }
 
 async function saveToCloud(txn, attachment) {
@@ -175,10 +184,21 @@ async function saveToCloud(txn, attachment) {
     cloudTxn.attachmentUrl = await getDownloadURL(fileRef);
   }
 
-  await addDoc(collection(cloudDb, FIRESTORE_COLLECTION), {
+  const docRef = await addDoc(collection(cloudDb, FIRESTORE_COLLECTION), {
     ...cloudTxn,
     createdAtServer: serverTimestamp(),
   });
+
+  return { ...cloudTxn, id: docRef.id };
+}
+
+function upsertTransaction(txn) {
+  const idx = allTransactions.findIndex((item) => item.id === txn.id);
+  if (idx >= 0) {
+    allTransactions[idx] = txn;
+  } else {
+    allTransactions.push(txn);
+  }
 }
 
 function startCloudSync() {
