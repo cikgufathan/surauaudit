@@ -62,3 +62,8 @@ python3 -m http.server 8080
 ```
 
 kemudian buka `http://localhost:8080`.
+
+
+## Nota kestabilan simpanan
+
+Jika cloud lambat/gagal, sistem akan auto fallback ke mod local supaya bila tekan **Simpan** data tidak hilang.
