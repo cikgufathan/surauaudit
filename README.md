@@ -7,9 +7,21 @@ Website ini untuk urus akaun masjid dengan fungsi:
 - Lampirkan bukti (gambar/PDF).
 - Auto-generate resit untuk transaksi tunai masuk.
 - Generate laporan audit.
+- Butang **Padam** untuk buang transaksi yang tersalah masuk.
 - **Cloud sync (Firebase Firestore + Storage)** supaya data boleh kongsi antara device.
 
-## Cara buka (paling mudah)
+## Guna terus di GitHub Pages
+
+Laman live:
+
+- https://cikgufathan.github.io/surauaudit/
+
+Login default:
+
+- Username: `admin`
+- Password: `admin123`
+
+## Cara buka lokal (paling mudah)
 
 1. Buka terminal dan masuk folder projek.
 2. Jalankan:
@@ -21,29 +33,21 @@ python3 -m http.server 8000
 3. Buka browser: `http://localhost:8000`
 4. Login default: `admin` / `admin123`
 
-## Aktifkan Cloud Sync (boleh sync)
-
 ## Cloud guna Google?
 
-**Ya, boleh.** Dalam projek ini, cloud sync memang guna **Google Firebase** (produk Google Cloud) iaitu:
+**Ya, boleh.** Dalam projek ini, cloud sync guna **Google Firebase** (produk Google Cloud):
 
 - **Cloud Firestore** untuk data transaksi.
 - **Cloud Storage** untuk fail bukti (gambar/PDF).
 
-Jadi jika anda tanya “boleh cloud guna Google ka?” jawapannya **boleh dan memang sudah disediakan** melalui Firebase config.
+## Aktifkan Cloud Sync (boleh sync)
 
-Secara default app jalan mode local sahaja. Untuk sync cloud:
+Jika `firebase-config.js` sudah ada nilai `projectId`, cloud sync akan auto aktif.
 
 1. Cipta projek Firebase.
 2. Aktifkan **Firestore Database** dan **Storage**.
-3. Salin fail config:
-
-```bash
-cp firebase-config.example.js firebase-config.js
-```
-
-4. Isi nilai config dalam `firebase-config.js`.
-5. Refresh browser.
+3. Isi fail `firebase-config.js` ikut projek anda.
+4. Refresh browser.
 
 Kalau betul, atas kanan akan tunjuk: **`Mod: cloud sync aktif`**.
 
