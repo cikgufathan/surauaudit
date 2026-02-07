@@ -250,7 +250,7 @@ function renderAudit() {
     const tr = document.createElement('tr');
     const detail = `${t.description || '-'} ${t.name ? `(${t.name})` : ''}`;
     const attachmentHtml = t.attachmentUrl
-      ? `<a href="${t.attachmentUrl}" target="_blank" rel="noopener noreferrer">${t.attachmentName || 'Lampiran'}</a>`
+      ? `<button type="button" class="btn-attachment" data-attachment="${t.id}">${t.attachmentName || 'Lampiran'}</button>`
       : '-';
 
     tr.innerHTML = `
@@ -271,6 +271,14 @@ function renderAudit() {
       const id = el.getAttribute('data-receipt');
       const txn = allTransactions.find((t) => t.id === id);
       if (txn) openReceipt(txn);
+    });
+  });
+
+  auditBody.querySelectorAll('[data-attachment]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const id = el.getAttribute('data-attachment');
+      const txn = allTransactions.find((t) => t.id === id);
+      if (txn) openAttachment(txn);
     });
   });
 
@@ -308,6 +316,47 @@ async function deleteTransaction(id) {
     console.error(error);
     alert('Gagal padam transaksi. Sila cuba lagi.');
   }
+}
+
+function openAttachment(txn) {
+  if (!txn.attachmentUrl) return;
+
+  if (txn.attachmentUrl.startsWith('data:')) {
+    downloadDataUrl(txn.attachmentUrl, txn.attachmentName || 'lampiran');
+    return;
+  }
+
+  const link = document.createElement('a');
+  link.href = txn.attachmentUrl;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.download = txn.attachmentName || 'lampiran';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+function downloadDataUrl(dataUrl, filename) {
+  const [meta, base64] = dataUrl.split(',');
+  if (!meta || !base64) return;
+
+  const mimeMatch = meta.match(/data:(.*);base64/);
+  const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+  const bytes = atob(base64);
+  const array = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i += 1) {
+    array[i] = bytes.charCodeAt(i);
+  }
+
+  const blob = new Blob([array], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 function openReceipt(txn) {

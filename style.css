@@ -22,3 +22,6 @@ th, td { border:1px solid #ddd; padding:8px; text-align:left; }
 
 .btn-delete { background:#b42318; width:auto; padding:6px 10px; }
 .btn-delete:hover { opacity:.95; }
+
+.btn-attachment { background:#175cd3; width:auto; padding:6px 10px; }
+.btn-attachment:hover { opacity:.95; }

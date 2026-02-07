@@ -67,3 +67,8 @@ kemudian buka `http://localhost:8080`.
 ## Nota kestabilan simpanan
 
 Jika cloud lambat/gagal, sistem akan auto fallback ke mod local supaya bila tekan **Simpan** data tidak hilang.
+
+
+## Nota lampiran PDF
+
+Jika tekan bukti PDF, sistem sekarang akan muat turun/buka fail dengan nama lampiran supaya tidak lagi keluar tab kosong `untitled`.
