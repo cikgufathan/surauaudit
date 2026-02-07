@@ -18,8 +18,8 @@ Laman live:
 
 Login default:
 
-- Username: `admin`
-- Password: `admin123`
+- Username: `suraumatsalleh`
+- Password: `surauMatSalleh900`
 
 ## Cara buka lokal (paling mudah)
 
@@ -31,7 +31,7 @@ python3 -m http.server 8000
 ```
 
 3. Buka browser: `http://localhost:8000`
-4. Login default: `admin` / `admin123`
+4. Login default: `suraumatsalleh` / `surauMatSalleh900`
 
 ## Cloud guna Google?
 
@@ -62,3 +62,8 @@ python3 -m http.server 8080
 ```
 
 kemudian buka `http://localhost:8080`.
+
+
+## Nota kestabilan simpanan
+
+Jika cloud lambat/gagal, sistem akan auto fallback ke mod local supaya bila tekan **Simpan** data tidak hilang.
