@@ -1,39 +1,16 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ms">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Audit Akaun Masjid (Cloud)</title>
-  <style>
-    /* CSS STYLE (Dari style.css) */
-    :root { font-family: Arial, sans-serif; }
-    body { margin: 0; background: #f3f6f4; }
-    header { background: #1e7b41; color: white; padding: 12px 18px; display:flex; justify-content:space-between; align-items:center; }
-    main { padding: 18px; max-width: 1200px; margin: auto; }
-    #syncStatus { display:block; text-align:right; margin-bottom:6px; opacity:.9; }
-    .card { background: white; border-radius: 10px; padding: 14px; margin-bottom: 16px; box-shadow: 0 2px 7px rgba(0,0,0,.08); }
-    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    label { display:block; margin-bottom: 8px; font-size: .93rem; }
-    input, select, textarea, button { width: 100%; padding: 8px; margin-top: 3px; box-sizing: border-box; }
-    button { cursor: pointer; background:#1e7b41; color:white; border:none; border-radius:6px; }
-    button:hover { opacity:.9; }
-    .hidden { display:none; }
-    .filters { display:grid; grid-template-columns: repeat(4,minmax(120px,1fr)); gap:8px; align-items:end; margin-bottom: 12px; }
-    table { width:100%; border-collapse: collapse; }
-    th, td { border:1px solid #ddd; padding:8px; text-align:left; }
-    .hint { color:#666; font-size:.9rem; }
-    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-    @media print {
-      header, .filters, #txnForm, #loginSection, #logoutBtn { display:none !important; }
-      body { background: white; }
-    }
-  </style>
+  <title>Audit Akaun Masjid</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header>
     <h1>Audit Akaun Masjid</h1>
     <div>
-      <small id="syncStatus">Check connection...</small>
+      <small id="syncStatus">Mod: local</small>
       <div id="topActions" class="hidden">
         <button id="logoutBtn">Logout</button>
       </div>
@@ -71,7 +48,7 @@
               </select>
             </label>
             <label>Amaun (RM)<input type="number" step="0.01" min="0.01" name="amount" required /></label>
-            <label>Kategori<input name="category" required placeholder="Contoh: Tabung Jumaat / Bil Elektrik" /></label>
+            <label>Kategori<input name="category" required /></label>
             <label>Kaedah
               <select name="method" required>
                 <option value="tunai">Tunai</option>
@@ -79,8 +56,8 @@
                 <option value="online">Online</option>
               </select>
             </label>
-            <label>Nama (optional)<input name="name" placeholder="Nama penderma (jika ada)" /></label>
-            <label>Keterangan<textarea name="description" placeholder="Catatan tambahan"></textarea></label>
+            <label>Nama (optional)<input name="name" /></label>
+            <label>Keterangan<textarea name="description"></textarea></label>
             <label>Lampiran (gambar/PDF)
               <input type="file" name="attachment" accept="image/*,.pdf" />
             </label>
@@ -90,17 +67,17 @@
       </div>
 
       <section class="card">
-        <h3>Laporan Audit</h3>
+        <h3>Generate Audit</h3>
         <div class="filters">
           <label>Dari<input type="date" id="fromDate" /></label>
           <label>Hingga<input type="date" id="toDate" /></label>
-          <button id="generateBtn">Filter</button>
-          <button id="printBtn">Cetak Laporan</button>
+          <button id="generateBtn">Generate</button>
+          <button id="printBtn">Print</button>
         </div>
 
         <table>
           <thead>
-            <tr><th>Tarikh</th><th>Jenis</th><th>Kategori</th><th>Amaun</th><th>Butiran</th><th>Bukti</th></tr>
+            <tr><th>Tarikh</th><th>Jenis</th><th>Kategori</th><th>Amaun</th><th>Butiran</th><th>Bukti</th><th>Tindakan</th></tr>
           </thead>
           <tbody id="auditBody"></tbody>
         </table>
@@ -111,279 +88,11 @@
   <dialog id="receiptDialog">
     <article id="receiptContent"></article>
     <menu>
-      <button id="printReceipt">Cetak Resit</button>
+      <button id="printReceipt">Print Resit</button>
       <button id="closeReceipt">Tutup</button>
     </menu>
   </dialog>
 
-  <script type="module">
-    // 1. IMPORT FIREBASE (Online)
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-    import {
-      addDoc, collection, getFirestore, onSnapshot, query, serverTimestamp, orderBy
-    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-    import {
-      getStorage, ref, uploadBytes, getDownloadURL
-    } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
-
-    // 2. CONFIGURATION (Ini kunci Cikgu tadi)
-    const FIREBASE_CONFIG = {
-      apiKey: "AIzaSyB6tfV8GVktWRJYniXBxA97cIsJF9prmP8",
-      authDomain: "surau-audit.firebaseapp.com",
-      projectId: "surau-audit",
-      storageBucket: "surau-audit.firebasestorage.app",
-      messagingSenderId: "573509490725",
-      appId: "1:573509490725:web:15ab6efdfbc390db54c7cc"
-    };
-
-    const FIRESTORE_COLLECTION = "masjid_transactions";
-
-    // 3. MAIN APP LOGIC
-    const STORAGE_KEY = 'masjid_audit_transactions_v1';
-    const ADMIN_USER = 'admin';
-    const ADMIN_PASS = 'admin123';
-
-    // Elements
-    const loginSection = document.getElementById('loginSection');
-    const appSection = document.getElementById('appSection');
-    const topActions = document.getElementById('topActions');
-    const auditBody = document.getElementById('auditBody');
-    const receiptDialog = document.getElementById('receiptDialog');
-    const receiptContent = document.getElementById('receiptContent');
-    const syncStatus = document.getElementById('syncStatus');
-    const txnForm = document.getElementById('txnForm');
-
-    // Set Date Default Today
-    txnForm.date.value = new Date().toISOString().slice(0, 10);
-
-    // Setup Cloud
-    const isCloudEnabled = Boolean(FIREBASE_CONFIG?.projectId);
-    let cloudDb = null;
-    let cloudStorage = null;
-    let allTransactions = [];
-    let stopCloudSync = null;
-
-    if (isCloudEnabled) {
-      try {
-        const app = initializeApp(FIREBASE_CONFIG);
-        cloudDb = getFirestore(app);
-        cloudStorage = getStorage(app);
-        syncStatus.textContent = 'Mod: cloud sync aktif (Online)';
-        syncStatus.style.color = 'green';
-        syncStatus.style.fontWeight = 'bold';
-      } catch (e) {
-        console.error("Firebase Error:", e);
-        syncStatus.textContent = 'Error: Gagal sambung Cloud';
-        syncStatus.style.color = 'red';
-      }
-    } else {
-      syncStatus.textContent = 'Mod: local sahaja (Offline)';
-      allTransactions = getLocalTransactions();
-    }
-
-    // --- Event Listeners ---
-
-    // Login
-    document.getElementById('loginForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const fd = new FormData(e.target);
-      if (fd.get('username') === ADMIN_USER && fd.get('password') === ADMIN_PASS) {
-        sessionStorage.setItem('isAdmin', 'true');
-        renderApp();
-      } else {
-        alert('Login gagal. Cuba admin / admin123');
-      }
-    });
-
-    // Logout
-    document.getElementById('logoutBtn').addEventListener('click', () => {
-      sessionStorage.removeItem('isAdmin');
-      renderApp();
-    });
-
-    // Submit Transaksi
-    txnForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = txnForm.querySelector('button');
-      const originalText = btn.textContent;
-      btn.textContent = 'Sedang simpan...';
-      btn.disabled = true;
-
-      const fd = new FormData(e.target);
-      const attachment = fd.get('attachment');
-
-      const txn = {
-        date: fd.get('date'),
-        type: fd.get('type'),
-        amount: Number(fd.get('amount')),
-        category: fd.get('category'),
-        method: fd.get('method'),
-        name: fd.get('name') || '',
-        description: fd.get('description') || '',
-        attachmentName: '',
-        attachmentUrl: '',
-        receiptNumber: null,
-        createdAt: new Date().toISOString(),
-      };
-
-      // Generate Receipt No (Kalau Tunai Masuk)
-      if (txn.type === 'masuk' && txn.method === 'tunai') {
-        const tempId = crypto.randomUUID().slice(0, 6).toUpperCase();
-        txn.receiptNumber = `RCPT-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${tempId}`;
-      }
-
-      try {
-        if (isCloudEnabled) {
-          // Upload Gambar ke Firebase Storage
-          if (attachment && attachment.size > 0) {
-            txn.attachmentName = attachment.name;
-            const fileRef = ref(cloudStorage, `masjid-bukti/${Date.now()}-${attachment.name}`);
-            await uploadBytes(fileRef, attachment);
-            txn.attachmentUrl = await getDownloadURL(fileRef);
-          }
-          // Simpan Data ke Firestore
-          await addDoc(collection(cloudDb, FIRESTORE_COLLECTION), {
-            ...txn,
-            createdAtServer: serverTimestamp(),
-          });
-        } else {
-          // Local Storage logic
-          if (attachment && attachment.size > 0) {
-            txn.attachmentName = attachment.name;
-            txn.attachmentUrl = await toBase64(attachment);
-          }
-          txn.id = crypto.randomUUID();
-          allTransactions.push(txn);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(allTransactions));
-          renderAudit();
-        }
-
-        if (txn.receiptNumber) openReceipt(txn);
-        txnForm.reset();
-        txnForm.date.value = new Date().toISOString().slice(0, 10);
-        alert('Transaksi berjaya disimpan!');
-      } catch (err) {
-        console.error(err);
-        alert('Gagal simpan transaksi. Sila semak internet atau config.');
-      } finally {
-        btn.textContent = originalText;
-        btn.disabled = false;
-      }
-    });
-
-    document.getElementById('generateBtn').addEventListener('click', renderAudit);
-    document.getElementById('printBtn').addEventListener('click', () => window.print());
-    document.getElementById('printReceipt').addEventListener('click', () => {
-        window.print();
-    });
-    document.getElementById('closeReceipt').addEventListener('click', () => receiptDialog.close());
-
-    // --- Functions ---
-
-    function getLocalTransactions() {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-    }
-
-    function startCloudSync() {
-      if (stopCloudSync) return;
-      // Real-time listener
-      const q = query(collection(cloudDb, FIRESTORE_COLLECTION), orderBy('date', 'desc'));
-      stopCloudSync = onSnapshot(q, (snapshot) => {
-        allTransactions = snapshot.docs.map((docItem) => ({ id: docItem.id, ...docItem.data() }));
-        renderAudit();
-      });
-    }
-
-    function renderApp() {
-      const loggedIn = sessionStorage.getItem('isAdmin') === 'true';
-      loginSection.classList.toggle('hidden', loggedIn);
-      appSection.classList.toggle('hidden', !loggedIn);
-      topActions.classList.toggle('hidden', !loggedIn);
-
-      if (loggedIn) {
-        if (isCloudEnabled) startCloudSync();
-        renderAudit();
-      }
-    }
-
-    function renderAudit() {
-      const from = document.getElementById('fromDate').value;
-      const to = document.getElementById('toDate').value;
-      
-      // Filter date & sort
-      let txns = allTransactions.filter((t) => (!from || t.date >= from) && (!to || t.date <= to));
-      txns.sort((a, b) => b.date.localeCompare(a.date)); // Paling baru atas
-
-      const totalIn = txns.filter((t) => t.type === 'masuk').reduce((sum, t) => sum + Number(t.amount), 0);
-      const totalOut = txns.filter((t) => t.type === 'keluar').reduce((sum, t) => sum + Number(t.amount), 0);
-
-      document.getElementById('sumIn').textContent = `RM ${totalIn.toFixed(2)}`;
-      document.getElementById('sumOut').textContent = `RM ${totalOut.toFixed(2)}`;
-      document.getElementById('balance').textContent = `RM ${(totalIn - totalOut).toFixed(2)}`;
-
-      auditBody.innerHTML = '';
-      txns.forEach((t) => {
-        const tr = document.createElement('tr');
-        const detail = `${t.description || '-'} ${t.name ? `(${t.name})` : ''}`;
-        const attachmentHtml = t.attachmentUrl
-          ? `<a href="${t.attachmentUrl}" target="_blank" style="color:blue;text-decoration:underline;">Lihat Bukti</a>`
-          : '-';
-
-        tr.innerHTML = `
-          <td>${t.date}</td>
-          <td>${t.type.toUpperCase()}</td>
-          <td>${t.category}</td>
-          <td style="color:${t.type==='masuk'?'green':'red'};font-weight:bold;">RM ${Number(t.amount).toFixed(2)}</td>
-          <td>${detail}</td>
-          <td>${attachmentHtml}${t.receiptNumber ? `<br/><small><a href="#" data-receipt="${t.id}">[Resit]</a></small>` : ''}</td>
-        `;
-        auditBody.appendChild(tr);
-      });
-
-      // Bind click event untuk resit
-      auditBody.querySelectorAll('[data-receipt]').forEach((el) => {
-        el.addEventListener('click', (e) => {
-          e.preventDefault();
-          const id = el.getAttribute('data-receipt');
-          const txn = allTransactions.find((t) => t.id === id);
-          if (txn) openReceipt(txn);
-        });
-      });
-    }
-
-    function openReceipt(txn) {
-      receiptContent.innerHTML = `
-        <div style="text-align:center; border:2px solid #000; padding:20px; margin:10px;">
-            <h3>RESIT RASMI</h3>
-            <p><strong>SURAU/MASJID (AUDIT SYSTEM)</strong></p>
-            <hr/>
-            <div style="text-align:left;">
-                <p><strong>No Resit:</strong> ${txn.receiptNumber || '-'}</p>
-                <p><strong>Tarikh:</strong> ${txn.date}</p>
-                <p><strong>Diterima Daripada:</strong> ${txn.name || 'Hamba Allah'}</p>
-                <p><strong>Tujuan:</strong> ${txn.category}</p>
-                <p><strong>Keterangan:</strong> ${txn.description || '-'}</p>
-                <hr/>
-                <h2 style="text-align:right;">RM ${Number(txn.amount).toFixed(2)}</h2>
-            </div>
-            <br/>
-            <small>Resit ini cetakan komputer. Tandatangan tidak diperlukan.</small>
-        </div>
-      `;
-      receiptDialog.showModal();
-    }
-
-    function toBase64(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
-
-    // Jalankan App
-    renderApp();
-  </script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
