@@ -23,6 +23,15 @@ python3 -m http.server 8000
 
 ## Aktifkan Cloud Sync (boleh sync)
 
+## Cloud guna Google?
+
+**Ya, boleh.** Dalam projek ini, cloud sync memang guna **Google Firebase** (produk Google Cloud) iaitu:
+
+- **Cloud Firestore** untuk data transaksi.
+- **Cloud Storage** untuk fail bukti (gambar/PDF).
+
+Jadi jika anda tanya “boleh cloud guna Google ka?” jawapannya **boleh dan memang sudah disediakan** melalui Firebase config.
+
 Secara default app jalan mode local sahaja. Untuk sync cloud:
 
 1. Cipta projek Firebase.
