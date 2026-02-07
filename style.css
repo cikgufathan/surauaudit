@@ -16,6 +16,9 @@ th, td { border:1px solid #ddd; padding:8px; text-align:left; }
 .hint { color:#666; font-size:.9rem; }
 @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
 @media print {
-  header, .filters, #txnForm, #loginSection, #logoutBtn { display:none !important; }
+  header, .filters, #txnForm, #loginSection, #logoutBtn, .btn-delete { display:none !important; }
   body { background: white; }
 }
+
+.btn-delete { background:#b42318; width:auto; padding:6px 10px; }
+.btn-delete:hover { opacity:.95; }
