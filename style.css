@@ -1,0 +1,21 @@
+:root { font-family: Arial, sans-serif; }
+body { margin: 0; background: #f3f6f4; }
+header { background: #1e7b41; color: white; padding: 12px 18px; display:flex; justify-content:space-between; align-items:center; }
+main { padding: 18px; max-width: 1200px; margin: auto; }
+#syncStatus { display:block; text-align:right; margin-bottom:6px; opacity:.9; }
+.card { background: white; border-radius: 10px; padding: 14px; margin-bottom: 16px; box-shadow: 0 2px 7px rgba(0,0,0,.08); }
+.grid { display:grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+label { display:block; margin-bottom: 8px; font-size: .93rem; }
+input, select, textarea, button { width: 100%; padding: 8px; margin-top: 3px; box-sizing: border-box; }
+button { cursor: pointer; background:#1e7b41; color:white; border:none; border-radius:6px; }
+button:hover { opacity:.9; }
+.hidden { display:none; }
+.filters { display:grid; grid-template-columns: repeat(4,minmax(120px,1fr)); gap:8px; align-items:end; margin-bottom: 12px; }
+table { width:100%; border-collapse: collapse; }
+th, td { border:1px solid #ddd; padding:8px; text-align:left; }
+.hint { color:#666; font-size:.9rem; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+@media print {
+  header, .filters, #txnForm, #loginSection, #logoutBtn { display:none !important; }
+  body { background: white; }
+}
