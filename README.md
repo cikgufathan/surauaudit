@@ -46,8 +46,10 @@ Jika `firebase-config.js` sudah ada nilai `projectId`, cloud sync akan auto akti
 
 1. Cipta projek Firebase.
 2. Aktifkan **Firestore Database** dan **Storage**.
-3. Isi fail `firebase-config.js` ikut projek anda.
-4. Refresh browser.
+3. Aktifkan **Authentication > Anonymous Sign-in** (penting untuk app static ini).
+4. Pastikan rules Firestore/Storage benarkan user yang login anonymous baca/tulis.
+5. Isi fail `firebase-config.js` ikut projek anda.
+6. Refresh browser.
 
 Kalau betul, atas kanan akan tunjuk: **`Mod: cloud sync aktif`**.
 
@@ -72,3 +74,30 @@ Jika cloud lambat/gagal, sistem akan auto fallback ke mod local supaya bila teka
 ## Nota lampiran PDF
 
 Jika tekan bukti PDF, sistem sekarang akan muat turun/buka fail dengan nama lampiran supaya tidak lagi keluar tab kosong `untitled`.
+
+
+Contoh ringkas rule Firestore (sementara untuk ujian):
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /masjid_transactions/{docId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+```
+
+Contoh ringkas rule Storage (sementara untuk ujian):
+
+```
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /masjid-bukti/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+```

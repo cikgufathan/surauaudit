@@ -17,6 +17,11 @@ import {
   ref,
   uploadBytes,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js';
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInAnonymously,
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import { FIREBASE_CONFIG, FIRESTORE_COLLECTION } from './firebase-config.js';
 
 const STORAGE_KEY = 'masjid_audit_transactions_v1';
@@ -40,13 +45,17 @@ const hasCloudConfig = Boolean(FIREBASE_CONFIG?.projectId);
 let cloudMode = hasCloudConfig;
 let cloudDb = null;
 let cloudStorage = null;
+let cloudAuth = null;
 let allTransactions = getLocalTransactions();
 let stopCloudSync = null;
+let cloudReadyPromise = Promise.resolve();
 
 if (hasCloudConfig) {
   const app = initializeApp(FIREBASE_CONFIG);
   cloudDb = getFirestore(app);
   cloudStorage = getStorage(app);
+  cloudAuth = getAuth(app);
+  cloudReadyPromise = initCloudAuth();
 }
 updateSyncStatus();
 
@@ -117,7 +126,7 @@ txnForm.addEventListener('submit', async (e) => {
         await saveToLocal(txn, attachment);
         cloudMode = false;
         updateSyncStatus('Cloud gagal. Auto tukar ke mod local supaya data tetap tercatat.');
-        alert('Cloud tidak respon. Data sudah disimpan local dahulu.');
+        alert('Cloud gagal/tiada akses Firebase. Data disimpan local dahulu.');
       } catch (localErr) {
         console.error(localErr);
         alert('Gagal simpan ke cloud dan local. Sila kecilkan saiz lampiran atau cuba lagi.');
@@ -140,6 +149,30 @@ function withTimeout(promise, timeoutMs) {
     promise,
     new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
   ]);
+}
+
+async function initCloudAuth() {
+  if (!cloudAuth) return;
+  updateSyncStatus('Sedang sambung Firebase...');
+
+  await signInAnonymously(cloudAuth);
+  await new Promise((resolve, reject) => {
+    const unsubscribe = onAuthStateChanged(
+      cloudAuth,
+      (user) => {
+        if (user) {
+          unsubscribe();
+          resolve();
+        }
+      },
+      (error) => {
+        unsubscribe();
+        reject(error);
+      },
+    );
+  });
+
+  updateSyncStatus('Cloud Firebase aktif');
 }
 
 function setSavingState(isSaving) {
@@ -173,6 +206,7 @@ async function saveToLocal(txn, attachment) {
 }
 
 async function saveToCloud(txn, attachment) {
+  await cloudReadyPromise;
   const cloudTxn = { ...txn };
   if (attachment && attachment.size > 0) {
     const safeName = attachment.name.replace(/\s+/g, '_');
@@ -201,8 +235,18 @@ function upsertTransaction(txn) {
   }
 }
 
-function startCloudSync() {
+async function startCloudSync() {
   if (!cloudMode || stopCloudSync) return;
+
+  try {
+    await withTimeout(cloudReadyPromise, CLOUD_TIMEOUT_MS);
+  } catch (error) {
+    console.error(error);
+    cloudMode = false;
+    updateSyncStatus('Firebase auth gagal. Sila hidupkan Anonymous Sign-in.');
+    return;
+  }
+
   const q = query(collection(cloudDb, FIRESTORE_COLLECTION), orderBy('date', 'asc'));
   stopCloudSync = onSnapshot(
     q,
@@ -214,7 +258,7 @@ function startCloudSync() {
     (error) => {
       console.error(error);
       cloudMode = false;
-      updateSyncStatus('Cloud sync terhenti. Guna local dahulu.');
+      updateSyncStatus('Cloud sync terhenti. Semak rules Firestore/Storage, guna local dahulu.');
       allTransactions = getLocalTransactions();
       renderAudit();
     },
