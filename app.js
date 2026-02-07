@@ -20,8 +20,8 @@ import {
 import { FIREBASE_CONFIG, FIRESTORE_COLLECTION } from './firebase-config.js';
 
 const STORAGE_KEY = 'masjid_audit_transactions_v1';
-const ADMIN_USER = 'admin';
-const ADMIN_PASS = 'admin123';
+const ADMIN_USER = 'suraumatsalleh';
+const ADMIN_PASS = 'surauMatSalleh900';
 const CLOUD_TIMEOUT_MS = 12000;
 
 const loginSection = document.getElementById('loginSection');
