@@ -1,5 +1,3 @@
-// firebase-config.js
-
 export const FIREBASE_CONFIG = {
   apiKey: "AIzaSyB6tfV8GVktWRJYniXBxA97cIsJF9prmP8",
   authDomain: "surau-audit.firebaseapp.com",
